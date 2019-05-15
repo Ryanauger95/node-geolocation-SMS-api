@@ -1,8 +1,12 @@
 const express = require('express');
 const ipInfo = require('./config/ipInfo');
-require('./services/passport');
 const app = express();
-require('./routes/authRoutes')(app);
+const cors = require('cors');
 
 
+// Register all API endpoints
+require('./routes/scheduleRoutes')(app);
+
+
+app.use(cors());
 app.listen(ipInfo.localPort);
