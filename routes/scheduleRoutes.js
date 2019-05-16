@@ -61,7 +61,11 @@ module.exports = async app => {
   // -- /sms
   //  Schedule an SMS to be sent with Twilio
   app.get("/sms", async (req, res) => {
-
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Origin, X-Requested-With, Content-Type, Accept"
+    );
     console.log(req.query);
     qr_code = req.query.qr_code;
     phone = req.query.phone;
