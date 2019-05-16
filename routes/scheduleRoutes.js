@@ -35,15 +35,45 @@ function createReminderMessage(addressData) {
   );
 }
 
+function createWelcomeMessage(addressData, UnixTime) {
+  dateStr = new Date(UnixTime * 1000).toString();
+  return (
+    "Thank you for signing up for SpotSpot! Keep this for your records, and we will remind you on " +
+    dateStr +
+    " You parked at " +
+    addressData.SpotAddress +
+    " " +
+    addressData.SpotCity +
+    ", " +
+    addressData.SpotState +
+    " " +
+    addressData.SpotZipCode +
+    " in zone " +
+    addressData.SpotZone +
+    ".\nGoogle Maps: " +
+    googleMapsURL(addressData.SpotLat, addressData.SpotLng) +
+    "\nApple Maps: " +
+    appleMapsURL(addressData.SpotLat, addressData.SpotLng)
+  );
+}
+
 module.exports = async app => {
-  //Schedule an SMS to be sent with Twilio
+  // -- /sms
+  //  Schedule an SMS to be sent with Twilio
   app.get("/sms", async (req, res) => {
     console.log(req.query);
     qr_code = req.query.qr_code;
     phone = req.query.phone;
     timestamp = req.query.unix_timestamp;
 
+    //insert the notification into the database
     dynamoDB.dynamo_insert_notif(qr_code, phone, timestamp);
+
+    //Imediately Send a Welcome SMS
+    // Gather the location Data
+    const address0 = await dynamoDB.dynamo_lookup_loc(qr_code);
+    console.log(address0);
+    twilioSMS.sendSMS(phone, createWelcomeMessage(address0, timestamp));
 
     // This needs to be a cron job
     // Schedule SMSs for each user
