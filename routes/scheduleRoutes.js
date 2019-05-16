@@ -1,47 +1,97 @@
-// import entire SDK
-const AWS = require("aws-sdk");
+const dynamoDB = require("../services/dynamoDB");
+const twilioSMS = require("../services/twilioSMS");
+const cronJobs = require("../services/cronJobs");
 
-const endpoint = new AWS.Endpoint("https://dynamodb.us-east-1.amazonaws.com");
-const credentials = new AWS.Credentials(
-  "AKIASKB57BNKGEMF7WUN",
-  "IR7EDx6Wyi6djriij5wVk/IveSJx2SRle/SXnPer",
-  (sessionToken = null)
-);
-const dynamodb = new AWS.DynamoDB({
-  apiVersion: "2012-08-10",
-  credentials: credentials,
-  endpoint: endpoint,
-  region: "us-east-1"
-});
-
-async function dynamo_lookup_loc(qr_code) {
-  var params = {
-    ExpressionAttributeValues: {
-      ":v1": {
-        S: qr_code
-      }
-    },
-    KeyConditionExpression: "QRID = :v1",
-    ProjectionExpression:
-      "QRID, SpotLat, SpotLng, SpotAddress, SpotCity, SpotLevel",
-    TableName: "QRCodes"
-  };
-  const request = dynamodb.query(params);
-  const data = await request.promise();
-
-  return data;
+function googleMapsURL(lat, lng) {
+  return (
+    "https://www.google.com/maps/search/?api=1&query=" +
+    String(lat) +
+    "," +
+    String(lng)
+  );
 }
-module.exports = app => {
-  // Our QR Code API returns an object in JSON form with the
-  // Location and level of the placed QR Code
-  // Must query dynamo-db
-  app.get("/qr", async (req, res) => {
+
+function appleMapsURL(lat, lng) {
+  return "http://maps.apple.com/?daddr=" + String(lat) + "," + String(lng);
+}
+
+function createReminderMessage(addressData) {
+  return (
+    "This is a SpotSpot reminder about your recent parking location. " +
+    "You parked at " +
+    addressData.SpotAddress +
+    " " +
+    addressData.SpotCity +
+    ", " +
+    addressData.SpotState +
+    " " +
+    addressData.SpotZipCode +
+    " in zone " +
+    addressData.SpotZone +
+    ".\nGoogle Maps: " +
+    googleMapsURL(addressData.SpotLat, addressData.SpotLng) +
+    "\nApple Maps: " +
+    appleMapsURL(addressData.SpotLat, addressData.SpotLng)
+  );
+}
+
+module.exports = async app => {
+  //Schedule an SMS to be sent with Twilio
+  app.get("/sms", async (req, res) => {
     console.log(req.query);
+    qr_code = req.query.qr_code;
+    phone = req.query.phone;
+    timestamp = req.query.unix_timestamp;
 
-    const _loc_info = await dynamo_lookup_loc(req.query.qr_code);
-    const loc_info = _loc_info.Items[0]
+    dynamoDB.dynamo_insert_notif(qr_code, phone, timestamp);
 
-    res.send(AWS.DynamoDB.Converter.unmarshall(loc_info));
+    // This needs to be a cron job
+    // Schedule SMSs for each user
+    cronJobs.newNodeCronJob(Number(timestamp), async () => {
+      // Get all of the pending notifications
+      const notificationDataList = await dynamoDB.dynamo_check_timestamps();
+      console.log(notificationDataList.length.toString() + " Results found");
+      console.log("notificationDataList");
+      console.log(notificationDataList);
 
+      // build a list of all of the QRIDs so that we can run
+      // a batch query to get the Address information
+      QRIDList = new Set();
+      notificationDataList.forEach(function(entry) {
+        QRIDList = QRIDList.add(entry.QRID);
+      });
+
+      // Look up the address information for all of the QRIDs
+      const addressDataList = await dynamoDB.dynamo_batch_lookup_loc(QRIDList);
+      console.log("addressDataList");
+      console.log(addressDataList);
+
+      // Loop through the notification list and match the address.
+      // Whenever we have a match, we build a message and send and SMS
+      for (var i = 0; i < notificationDataList.length; i++) {
+        const notification = notificationDataList[i];
+        for (var j = 0; j < addressDataList.length; j++) {
+          const address = addressDataList[j];
+          if ((notification.QRID = address.QRID)) {
+            // Build A Message
+            const message = createReminderMessage(address);
+
+            // Send the Message
+            if (notification.Type == "Phone") {
+              twilioSMS.sendSMS(notification.Address, message);
+            }
+
+            //delete the notification
+            dynamoDB.dynamo_delete_notification(
+              notification.Address,
+              notification.UnixTime
+            );
+
+            break;
+          }
+        }
+      }
+    });
+    res.send({});
   });
 };
