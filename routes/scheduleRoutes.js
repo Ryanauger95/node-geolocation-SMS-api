@@ -61,6 +61,7 @@ module.exports = async app => {
   // -- /sms
   //  Schedule an SMS to be sent with Twilio
   app.get("/sms", async (req, res) => {
+
     console.log(req.query);
     qr_code = req.query.qr_code;
     phone = req.query.phone;
