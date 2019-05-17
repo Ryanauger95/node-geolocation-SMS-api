@@ -1,11 +1,11 @@
 const common = require("./commonFunctions")
-// import entire SDK
 const AWS = require("aws-sdk");
+const Keys = require('../config/keys')
 
 const endpoint = new AWS.Endpoint("https://dynamodb.us-east-1.amazonaws.com");
 const credentials = new AWS.Credentials(
-  "AKIASKB57BNKGEMF7WUN",
-  "IR7EDx6Wyi6djriij5wVk/IveSJx2SRle/SXnPer",
+  Keys.awsDynamo.accessID,
+  Keys.awsDynamo.accessKey,
   (sessionToken = null)
 );
 

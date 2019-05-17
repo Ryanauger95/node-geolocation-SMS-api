@@ -1,3 +1,0 @@
-module.exports = {
-  googleMapsAPIKey: process.ENV.GOOGLE_MAPS_API_KEY
-}
